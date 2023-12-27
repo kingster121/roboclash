@@ -10,6 +10,7 @@ const int PWM_RESOLUTION = 11; // Allows control over the granularity of the spe
 const int MAX_PWM = pow(2, PWM_RESOLUTION);
 
 // Note that duty_cycle comes in percentage
+void moveMotor(int ch, long duty_cycle, bool reverse);
 
 void setup()
 {

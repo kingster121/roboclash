@@ -1,5 +1,5 @@
 #include <PPMReader.h>
-#include <Movement.h>
+#include <Movement_Polar.h>
 
 // Movement object - contains move method
 Movement myMovement;
@@ -10,10 +10,10 @@ byte interruptPin = 13;
 byte channelAmount = 10;
 PPMReader ppm(interruptPin, channelAmount);
 
-const int D0 = 27;
-const int D1 = 26;
-const int D2 = 25;
-const int D3 = 33;
+const int D0 = 33;
+const int D1 = 25;
+const int D2 = 26;
+const int D3 = 27;
 
 const int L_MOTOR_CH = 0; // Choose a PWM channel (0-15)
 const int R_MOTOR_CH = 1;
@@ -22,7 +22,6 @@ const int PWM_FREQ = 70;       // PWM frequency in Hz
 const int PWM_RESOLUTION = 20; // Allows control over the granularity of the speed
 const int MAX_PWM = pow(2, PWM_RESOLUTION);
 
-void moveMotor(int ch, long duty_cycle, bool reverse);
 void moveMotors(float l_duty_cycle, float r_duty_cycle);
 
 void setup()
@@ -46,12 +45,12 @@ void loop()
         channel_arr[channel - 1] = value;
     }
     Serial.println();
-    delay(2000);
+    delay(1000);
 
     int speed = channel_arr[1];
     int turn = channel_arr[0];
-    Serial.println("speed: " + String(speed));
-    Serial.println("turn: " + String(turn));
+    // Serial.println("y: " + String(speed));
+    // Serial.println("x: " + String(turn));
 
     std::array<float, 2> motor_duty_cycles = myMovement.move(turn, speed);
     float l_duty_cycle = motor_duty_cycles[0];
@@ -59,19 +58,21 @@ void loop()
     moveMotors(l_duty_cycle, r_duty_cycle);
 }
 
+// Powers the L_MOTOR and R_MOTOR.
+// duty_cycle inputs go from -1 to 1
 void moveMotors(float l_duty_cycle, float r_duty_cycle)
 {
     if (l_duty_cycle < 0)
     {
-        ledcDetachPin(D0);
-        ledcAttachPin(D1, L_MOTOR_CH);
-        digitalWrite(D0, 0);
-    }
-    else
-    {
         ledcDetachPin(D1);
         ledcAttachPin(D0, L_MOTOR_CH);
         digitalWrite(D1, 0);
+    }
+    else
+    {
+        ledcDetachPin(D0);
+        ledcAttachPin(D1, L_MOTOR_CH);
+        digitalWrite(D0, 0);
     }
 
     if (r_duty_cycle < 0)
