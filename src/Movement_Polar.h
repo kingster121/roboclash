@@ -57,6 +57,8 @@ public:
 
         l_motor_duty_cycle = l_motor_duty_cycle * magnitude / 100.0;
         r_motor_duty_cycle = r_motor_duty_cycle * magnitude / 100.0;
-        return {l_motor_duty_cycle, r_motor_duty_cycle};
+
+        // Note to self, i simply changed the return orirentation. Above code should change by right
+        return {r_motor_duty_cycle, l_motor_duty_cycle};
     }
 };

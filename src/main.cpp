@@ -45,17 +45,20 @@ void loop()
         channel_arr[channel - 1] = value;
     }
     Serial.println();
-    delay(1000);
+    delay(20);
 
     int speed = channel_arr[1];
     int turn = channel_arr[0];
     // Serial.println("y: " + String(speed));
     // Serial.println("x: " + String(turn));
 
-    std::array<float, 2> motor_duty_cycles = myMovement.move(turn, speed);
-    float l_duty_cycle = motor_duty_cycles[0];
-    float r_duty_cycle = motor_duty_cycles[1];
-    moveMotors(l_duty_cycle, r_duty_cycle);
+    if (channel_arr[0] != 0)
+    {
+        std::array<float, 2> motor_duty_cycles = myMovement.move(turn, speed);
+        float l_duty_cycle = motor_duty_cycles[0];
+        float r_duty_cycle = motor_duty_cycles[1];
+        moveMotors(l_duty_cycle, r_duty_cycle);
+    }
 }
 
 // Powers the L_MOTOR and R_MOTOR.
@@ -91,8 +94,8 @@ void moveMotors(float l_duty_cycle, float r_duty_cycle)
     l_duty_cycle = round(abs(l_duty_cycle) * MAX_PWM);
     r_duty_cycle = round(abs(r_duty_cycle) * MAX_PWM);
 
-    Serial.println("l_duty_cycle: " + String(l_duty_cycle));
-    Serial.println("r_duty_cycle: " + String(r_duty_cycle));
+    // Serial.println("l_duty_cycle: " + String(l_duty_cycle));
+    // Serial.println("r_duty_cycle: " + String(r_duty_cycle));
 
     ledcWrite(L_MOTOR_CH, l_duty_cycle);
     ledcWrite(R_MOTOR_CH, r_duty_cycle);
