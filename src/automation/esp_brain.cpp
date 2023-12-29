@@ -60,18 +60,18 @@ void loop()
     int *ultrasonic_dist_arr = get_ultrasonic_dist();
     show_distance(ultrasonic_dist_arr);
 
-    while (time_passed < 180)
-    {
-        forward();
-        turn_left();
-        forward(2);
-        turn_left();
+    // while (time_passed < 180)
+    // {
+    //     forward();
+    //     turn_left();
+    //     forward(2);
+    //     turn_left();
 
-        forward();
-        turn_right();
-        forward(2);
-        turn_right();
-    }
+    //     forward();
+    //     turn_right();
+    //     forward(2);
+    //     turn_right();
+    // }
 
     // Execute go home function
 
@@ -99,13 +99,13 @@ int *get_ultrasonic_dist()
 {
     static int distanceArray[4];
     distanceArray[0] = sonar_right.ping_cm();
-    // distanceArray[1] = sonar_front.ping_cm();
-    // distanceArray[2] = sonar_left.ping_cm();
-    // distanceArray[3] = sonar_back.ping_cm();
+    distanceArray[1] = sonar_front.ping_cm();
+    distanceArray[2] = sonar_left.ping_cm();
+    distanceArray[3] = sonar_back.ping_cm();
 
-    distanceArray[1] = 0;
-    distanceArray[2] = 0;
-    distanceArray[3] = 0;
+    // distanceArray[1] = 0;
+    // distanceArray[2] = 0;
+    // distanceArray[3] = 0;
 
     return distanceArray; // Returns pointer to the array
 }
@@ -133,17 +133,17 @@ void show_distance(int *ultrasonic_dist_arr)
 
 //-------------- Essential functions ---------------//
 
-void foward()
+void forward()
 {
     while (true)
     {
         int dist = sonar_front.ping_cm();
         if (dist > 0 && dist <= WALL_DISTANCE)
             break;
-        }
+    }
 }
 
-void foward(int time)
+void forward(int time)
 {
 }
 
