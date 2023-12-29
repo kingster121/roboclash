@@ -1,11 +1,5 @@
 #include <math.h>
 
-float normalise(int value)
-{
-    float norm = (value - 1500) / 500.0;
-    return norm;
-}
-
 void cartesianToPolar(int xSquare, int ySquare, float &magnitude, float &angle)
 {
 
