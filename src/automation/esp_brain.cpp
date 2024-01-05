@@ -10,6 +10,7 @@ QMC5883LCompass compass;
 int north;
 int get_angle(int base_north)
 {
+    compass.read();
     int current_angle = compass.getAzimuth();
     int azimuth = current_angle - base_north;
     if (azimuth < -180)
@@ -48,6 +49,8 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
     // Serial.print(macStr);
     // Serial.print(" send status:\t");
     // Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+    Serial.println("l_motor: " + String(data.l_motor_duty_cycle));
+    Serial.println("r_motor: " + String(data.r_motor_duty_cycle));
 }
 
 // Max distance for ultrasonic
@@ -58,14 +61,14 @@ const int WALL_DISTANCE = 40;
 const int TRIGGER_PIN_1 = 5;
 const int ECHO_PIN_1 = 18;
 
-const int TRIGGER_PIN_2 = 23;
-const int ECHO_PIN_2 = 19;
+const int TRIGGER_PIN_2 = 32;
+const int ECHO_PIN_2 = 34;
 
-const int TRIGGER_PIN_3 = 32;
-const int ECHO_PIN_3 = 34;
+const int TRIGGER_PIN_3 = 33;
+const int ECHO_PIN_3 = 35;
 
-const int TRIGGER_PIN_4 = 33;
-const int ECHO_PIN_4 = 35;
+const int TRIGGER_PIN_4 = 23;
+const int ECHO_PIN_4 = 19;
 
 // Initialise Newping Object (Ultrasonics)
 NewPing sonar_right(TRIGGER_PIN_1, ECHO_PIN_1, MAX_DISTANCE);
@@ -123,9 +126,12 @@ void setup()
 
     // Get the true-north
     Serial.println("Get what degree is the true-north");
+    compass.read();
+    north = compass.getAzimuth();
 
     // Turn right until (right == true)
     Serial.println("Turn right until compass is East");
+    turn_right();
 }
 
 void loop()
@@ -240,6 +246,7 @@ void forward(unsigned long time)
     data.r_motor_duty_cycle = 50;
     esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
 
+    compass.read();
     int start_angle = compass.getAzimuth();
     ;
     unsigned long start = millis();
@@ -265,6 +272,7 @@ void turn_left()
     data.r_motor_duty_cycle = 50;
     esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
 
+    compass.read();
     int start_angle = compass.getAzimuth();
     int angle_offset;
     while (angle_offset < 90)
@@ -277,17 +285,20 @@ void turn_left()
 }
 void turn_right()
 {
-    Serial.println("Turn right");
+    Serial.print("Turning right");
 
     data.l_motor_duty_cycle = 50;
     data.r_motor_duty_cycle = 0;
     esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
 
+    compass.read();
     int start_angle = compass.getAzimuth();
-    int angle_offset;
+    int angle_offset = 0;
     while (angle_offset > -90)
     {
+        // Serial.print(".");
         angle_offset = get_angle(start_angle);
+        // Serial.print(angle_offset);
         delay(100);
     }
 
