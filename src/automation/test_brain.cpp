@@ -17,7 +17,7 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
 }
 
 // (RX) ESP MAC address
-uint8_t broadcast_address1[] = {0x24, 0x0A, 0xC4, 0x60, 0xCA, 0x8C};
+uint8_t broadcast_address1[] = {0xB0, 0xA7, 0x32, 0x2B, 0x6E, 0x24};
 
 // ESP NOW message struct
 typedef struct struct_message
