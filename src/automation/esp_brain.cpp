@@ -3,6 +3,25 @@
 #include <esp_now.h>
 #include <WiFi.h>
 #include <Wire.h>
+#include <QMC5883LCompass.h>
+
+// Compass
+QMC5883LCompass compass;
+int north;
+int get_angle(int base_north)
+{
+    int current_angle = compass.getAzimuth();
+    int azimuth = current_angle - base_north;
+    if (azimuth < -180)
+        azimuth = 360 + azimuth;
+    if (azimuth > 180)
+        azimuth = azimuth - 360;
+
+    // Serial.print("North:" + String(north) + "\t");
+    // Serial.print("Current Angle: " + String(current_angle) + "\t");
+    // Serial.println("Azimuth: " + String(azimuth) + "\t");
+    return azimuth;
+}
 
 // (RX) ESP MAC address
 uint8_t broadcast_address1[] = {0x24, 0x0A, 0xC4, 0x60, 0xCA, 0x8C};
@@ -21,14 +40,14 @@ esp_now_peer_info_t peerInfo;
 // callback when data is sent
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
 {
-    char macStr[18];
-    Serial.print("Packet to: ");
-    // Copies the sender mac address to a string
-    snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
-             mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
-    Serial.print(macStr);
-    Serial.print(" send status:\t");
-    Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+    // char macStr[18];
+    // Serial.print("Packet to: ");
+    // // Copies the sender mac address to a string
+    // snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
+    //          mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+    // Serial.print(macStr);
+    // Serial.print(" send status:\t");
+    // Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
 }
 
 // Max distance for ultrasonic
@@ -36,30 +55,26 @@ const int MAX_DISTANCE = 50;
 const int WALL_DISTANCE = 40;
 
 // Ultrasonic pin config
-const int TRIGGER_PIN_1 = 2;
-const int ECHO_PIN_1 = 15;
+const int TRIGGER_PIN_1 = 5;
+const int ECHO_PIN_1 = 18;
 
-const int TRIGGER_PIN_2 = 4;
-const int ECHO_PIN_2 = 16;
+const int TRIGGER_PIN_2 = 23;
+const int ECHO_PIN_2 = 19;
 
-const int TRIGGER_PIN_3 = 17;
-const int ECHO_PIN_3 = 5;
+const int TRIGGER_PIN_3 = 32;
+const int ECHO_PIN_3 = 34;
 
-const int TRIGGER_PIN_4 = 18;
-const int ECHO_PIN_4 = 19;
-
-// IMU - I2C address 0x68
-// Nothing for now
-
-// Compass
-const int COMPASS_SCL = 22;
-const int COMPASS_SDA = 21;
+const int TRIGGER_PIN_4 = 33;
+const int ECHO_PIN_4 = 35;
 
 // Initialise Newping Object (Ultrasonics)
 NewPing sonar_right(TRIGGER_PIN_1, ECHO_PIN_1, MAX_DISTANCE);
 NewPing sonar_front(TRIGGER_PIN_2, ECHO_PIN_2, MAX_DISTANCE);
 NewPing sonar_left(TRIGGER_PIN_3, ECHO_PIN_3, MAX_DISTANCE);
 NewPing sonar_back(TRIGGER_PIN_4, ECHO_PIN_4, MAX_DISTANCE);
+
+// IMU - I2C address 0x68
+// Nothing for now
 
 //--------------- Helper functions -----------------//
 int *get_ultrasonic_dist(); // Returns array[4] = {right, front, left, back}
@@ -81,16 +96,20 @@ unsigned long start_time = millis();
 void setup()
 {
     Serial.begin(115200);
-    WiFi.mode(WIFI_STA);
 
+    // Compass initialisation and calibration
+    compass.init();
+    compass.setCalibration(-1227, 920, -1190, 1457, -5683, -3171);
+    north = compass.getAzimuth();
+
+    // ESP_NOW
+    WiFi.mode(WIFI_STA);
     if (esp_now_init() != ESP_OK)
     {
         Serial.println("Error initialising ESP_NOW");
         return;
     }
-
     esp_now_register_send_cb(OnDataSent);
-
     // Register peer
     peerInfo.channel = 0;
     peerInfo.encrypt = false;
@@ -119,15 +138,15 @@ void loop()
     {
         forward();
         forward(2000);
-        // forward();
-        // turn_left();
-        // forward(2);
-        // turn_left();
+        forward();
+        turn_left();
+        forward(2);
+        turn_left();
 
-        // forward();
-        // turn_right();
-        // forward(2);
-        // turn_right();
+        forward();
+        turn_right();
+        forward(2);
+        turn_right();
     }
 
     // Execute go home function
@@ -195,15 +214,12 @@ void forward()
     data.r_motor_duty_cycle = 50;
     esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
 
-    float start_orient = 0; // Change to read the compass angle
+    int start_angle = compass.getAzimuth(); // Change to read the compass angle
     int dist = sonar_front.ping_cm();
     while ((dist == 0) || (dist > WALL_DISTANCE))
     {
-        // Change to read actual compass
-        float current_orient = random(-10, 10);
-
-        float angle_offset = current_orient - start_orient;
-        float proportional = map(angle_offset, -45, 45, -5, 5);
+        int angle_offset = get_angle(start_angle);
+        float proportional = mapfloat(angle_offset, -45, 45, -5, 5);
 
         data.l_motor_duty_cycle += proportional;
         data.r_motor_duty_cycle -= proportional;
@@ -224,14 +240,13 @@ void forward(unsigned long time)
     data.r_motor_duty_cycle = 50;
     esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
 
-    float start_orient = 0;
+    int start_angle = compass.getAzimuth();
+    ;
     unsigned long start = millis();
     while (millis() - start <= time)
     {
-        // Change to read actual compass
-        float current_orient = random(-10, 10);
+        int angle_offset = get_angle(start_angle);
 
-        float angle_offset = current_orient - start_orient;
         float proportional = mapfloat(angle_offset, -45, 45, -5, 5);
 
         data.l_motor_duty_cycle += proportional;
@@ -250,12 +265,12 @@ void turn_left()
     data.r_motor_duty_cycle = 50;
     esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
 
-    float start_orient = 0;
-    float current_orient = start_orient;
-    while (current_orient - start_orient < 90)
+    int start_angle = compass.getAzimuth();
+    int angle_offset;
+    while (angle_offset < 90)
     {
+        angle_offset = get_angle(start_angle);
         delay(100);
-        current_orient = random(-10, 10);
     }
 
     stop();
@@ -268,12 +283,12 @@ void turn_right()
     data.r_motor_duty_cycle = 0;
     esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
 
-    float start_orient = 0;
-    float current_orient = start_orient;
-    while (current_orient - start_orient > -90)
+    int start_angle = compass.getAzimuth();
+    int angle_offset;
+    while (angle_offset > -90)
     {
+        angle_offset = get_angle(start_angle);
         delay(100);
-        current_orient = random(-10, 10);
     }
 
     stop();
