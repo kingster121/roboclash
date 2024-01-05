@@ -100,11 +100,6 @@ void setup()
 {
     Serial.begin(115200);
 
-    // Compass initialisation and calibration
-    compass.init();
-    compass.setCalibration(-1227, 920, -1190, 1457, -5683, -3171);
-    north = compass.getAzimuth();
-
     // ESP_NOW
     WiFi.mode(WIFI_STA);
     if (esp_now_init() != ESP_OK)
@@ -123,6 +118,10 @@ void setup()
         Serial.println("Failed to add peer");
         return;
     }
+
+    // Compass initialisation and calibration
+    compass.init();
+    compass.setCalibration(-1227, 920, -1190, 1457, -5683, -3171);
 
     // Get the true-north
     Serial.println("Get what degree is the true-north");
