@@ -7,8 +7,10 @@
 // Must match the sender structure
 typedef struct struct_message
 {
-    float l_motor_duty_cycle;
-    float r_motor_duty_cycle;
+    int ultrasonic1;
+    int ultrasonic2;
+    int ultrasonic3;
+    int angle;
 } struct_message;
 
 // Create a struct_message called myData
@@ -121,13 +123,14 @@ void moveMotors(float l_duty_cycle, float r_duty_cycle)
 void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
 {
     memcpy(&data, incomingData, sizeof(data));
-    Serial.print("Bytes received: ");
-    Serial.println(len);
-    Serial.print("l_motor_duty_cycle: ");
-    Serial.println(data.l_motor_duty_cycle);
-    Serial.print("r_motor_duty_cycle: ");
-    Serial.println(data.r_motor_duty_cycle);
-    Serial.println();
+    Serial.print("Ultrasonic1: ");
+    Serial.println(data.ultrasonic1);
+    Serial.print("Ultrasonic2: ");
+    Serial.println(data.ultrasonic2);
+    Serial.print("Ultrasonic3: ");
+    Serial.println(data.ultrasonic3);
+    Serial.print("Angle: ");
+    Serial.println(data.angle);
 
-    moveMotors(data.l_motor_duty_cycle, data.r_motor_duty_cycle);
+    // moveMotors(data.l_motor_duty_cycle, data.r_motor_duty_cycle);
 }

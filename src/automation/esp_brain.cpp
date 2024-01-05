@@ -25,7 +25,8 @@ int get_angle(int base_north)
 }
 
 // (RX) ESP MAC address
-uint8_t broadcast_address1[] = {0x24, 0x0A, 0xC4, 0x60, 0xCA, 0x8C};
+uint8_t broadcast_address1[] = {0xB0, 0xA7, 0x32, 0x2B, 0x6E, 0x24};
+uint8_t broadcast_address2[] = {0x24, 0x62, 0xAB, 0xE0, 0xEF, 0xF0};
 
 // ESP NOW message struct
 typedef struct struct_message
@@ -118,6 +119,13 @@ void setup()
         Serial.println("Failed to add peer");
         return;
     }
+    // Register second peer
+    memcpy(peerInfo.peer_addr, broadcast_address2, 6);
+    if (esp_now_add_peer(&peerInfo) != ESP_OK)
+    {
+        Serial.println("Failed to add peer");
+        return;
+    }
 
     // Compass initialisation and calibration
     compass.init();
@@ -141,8 +149,6 @@ void loop()
 
     while (millis() - start_time < 180000)
     {
-        forward();
-        forward(2000);
         forward();
         turn_left();
         forward(2);
@@ -273,7 +279,7 @@ void turn_left()
 
     compass.read();
     int start_angle = compass.getAzimuth();
-    int angle_offset;
+    int angle_offset = 0;
     while (angle_offset < 90)
     {
         angle_offset = get_angle(start_angle);

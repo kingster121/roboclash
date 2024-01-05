@@ -24,18 +24,18 @@ public:
         // float magnitude = sqrt(pow(x, 2) + pow(y, 2));
 
         // Vincents
-        int abs_total = abs(x) + abs(y);
-        std::cout << "x: " << x << "\n"
-                  << std::flush;
-        std::cout << "y: " << y << "\n"
-                  << std::flush;
+        // int abs_total = abs(x) + abs(y);
+        // std::cout << "x: " << x << "\n"
+        //           << std::flush;
+        // std::cout << "y: " << y << "\n"
+        //           << std::flush;
 
-        l_motor_duty_cycle = (y - x) / abs_total * 100;
-        r_motor_duty_cycle = (y + x) / abs_total * 100;
-        std::cout << "l_motor: " << l_motor_duty_cycle << "\n"
-                  << std::flush;
-        std::cout << "r_motor: " << r_motor_duty_cycle << "\n"
-                  << std::flush;
+        // l_motor_duty_cycle = (y - x) / abs_total * 100;
+        // r_motor_duty_cycle = (y + x) / abs_total * 100;
+        // std::cout << "l_motor: " << l_motor_duty_cycle << "\n"
+        //           << std::flush;
+        // std::cout << "r_motor: " << r_motor_duty_cycle << "\n"
+        //           << std::flush;
 
         // float magnitude, angle;
         // cartesianToPolar(x, y, magnitude, angle); // Edits magnitude and angle by pointer

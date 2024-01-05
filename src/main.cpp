@@ -10,7 +10,7 @@ Movement myMovement;
 
 // Initialize a PPMReader on digital pin 3 with 6 expected channels.
 int channel_arr[10] = {};
-byte interruptPin = 13;
+byte interruptPin = 23;
 byte channelAmount = 10;
 PPMReader ppm(interruptPin, channelAmount);
 
@@ -48,7 +48,7 @@ void loop()
     for (byte channel = 1; channel <= channelAmount; ++channel)
     {
         unsigned value = ppm.latestValidChannelValue(channel, 0);
-        // Serial.print("C" + String(channel) + ": " + String(value) + "\t");
+        Serial.print("C" + String(channel) + ": " + String(value) + "\t");
         channel_arr[channel - 1] = value;
     }
     // Serial.println();
