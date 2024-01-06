@@ -3,16 +3,23 @@
 #include <esp_now.h>
 #include <Wire.h>
 
+// RX adddress
+uint8_t broadcast_address1[] = {0x24, 0x62, 0xAB, 0xE0, 0xEF, 0xF0};
+
 // Structure example to receive data
 // Must match the sender structure
 typedef struct struct_message
 {
     float l_motor_duty_cycle;
     float r_motor_duty_cycle;
+    String command;
+    int angle;
 } struct_message;
 
 // Create a struct_message called myData
 struct_message data;
+
+esp_now_peer_info_t peerInfo;
 
 // callback function that will be executed when data is received
 void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len);
@@ -22,7 +29,7 @@ const int D1 = 19; // R_MOTOR
 const int D2 = 18; // L_MOTOR
 const int D3 = 5;  // L_MOTOR
 
-// Spinners
+// Spinners --- 4 and 5 are for front spinner --- 6 and 7 is for the top thigny
 const int D4 = 23;
 const int D5 = 22;
 const int D6 = 1;
@@ -46,6 +53,7 @@ void setup()
         Serial.println("Error initializing ESP-NOW");
         return;
     }
+
     // Once ESPNow is successfully Init, we will register for recv CB to
     // get recv packer info
     esp_now_register_recv_cb(OnDataRecv);
@@ -56,15 +64,21 @@ void setup()
     pinMode(D1, OUTPUT);
     pinMode(D2, OUTPUT);
     pinMode(D3, OUTPUT);
-    Serial.begin(115200);
+    pinMode(D4, OUTPUT);
+    pinMode(D5, OUTPUT);
+    pinMode(D6, OUTPUT);
+    pinMode(D7, OUTPUT);
 
-    // Bluetooth monitor
-    // SerialBT.begin("ESP32 Bluetooth");
+    // Front spinner will always spin inwards
+    digitalWrite(D5, HIGH);
+    digitalWrite(D6, LOW);
+
+    Serial.begin(115200);
 }
 
 void loop()
 {
-    Serial.println("This is looping");
+    // Serial.println("This is looping");
     // // Print latest valid values from all channels
     // for (byte channel = 1; channel <= channelAmount; ++channel)
     // {
@@ -74,7 +88,7 @@ void loop()
     // }
     // // Serial.println();
     // delay(100);
-    delay(1000);
+    // delay(1000);
 }
 
 // Powers the L_MOTOR and R_MOTOR.
@@ -121,8 +135,8 @@ void moveMotors(float l_duty_cycle, float r_duty_cycle)
 void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
 {
     memcpy(&data, incomingData, sizeof(data));
-    Serial.print("Bytes received: ");
-    Serial.println(len);
+    // Serial.print("Bytes received: ");
+    // Serial.println(len);
     Serial.print("l_motor_duty_cycle: ");
     Serial.println(data.l_motor_duty_cycle);
     Serial.print("r_motor_duty_cycle: ");

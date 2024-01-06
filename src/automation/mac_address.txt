@@ -1,3 +1,6 @@
 RX: B0:A7:32:2B:6E:24
 TX: D8:BC:38:E4:13:34
 E0: 24:62:AB:E0:EF:F0
+
+Past calibration
+compass.setCalibration(-1227, 920, -1190, 1457, -5683, -3171);

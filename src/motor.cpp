@@ -14,25 +14,27 @@ void moveMotor(int ch, long duty_cycle, bool reverse);
 
 void setup()
 {
-    ledcSetup(L_MOTOR_CH, PWM_FREQ, PWM_RESOLUTION); // Configure PWM parameters for channel 0
+    // ledcSetup(L_MOTOR_CH, PWM_FREQ, PWM_RESOLUTION); // Configure PWM parameters for channel 0
     pinMode(D0, OUTPUT);
     pinMode(D1, OUTPUT);
     Serial.begin(115200);
 
-    float t = 0;
-    const float f = 0.5;
-    while (1)
-    {
-        moveMotor(L_MOTOR_CH, 100 * sin(2 * PI * f * t), false);
-        delay(1);
-        t += 0.001;
-    }
+    // float t = 0;
+    // const float f = 0.5;
+    // while (1)
+    // {
+    //     moveMotor(L_MOTOR_CH, 100 * sin(2 * PI * f * t), false);
+    //     delay(1);
+    //     t += 0.001;
+    // }
 }
 
 void loop()
 {
     int a = 0;
     Serial.print(a);
+    digitalWrite(D0, HIGH);
+    digitalWrite(D1, LOW);
 }
 
 // ch: PWM Channel

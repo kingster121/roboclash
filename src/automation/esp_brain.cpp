@@ -33,6 +33,8 @@ typedef struct struct_message
 {
     float l_motor_duty_cycle;
     float r_motor_duty_cycle;
+    String command;
+    int angle;
 } struct_message;
 
 struct_message data;
@@ -52,10 +54,15 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
     // Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
     Serial.println("l_motor: " + String(data.l_motor_duty_cycle));
     Serial.println("r_motor: " + String(data.r_motor_duty_cycle));
+    // Serial.println("command: " + String(data.command));
+    Serial.println("angle: " + String(data.angle));
 }
 
+// Max speed of motors
+const float MAX_SPEED = 0.25;
+
 // Max distance for ultrasonic
-const int MAX_DISTANCE = 50;
+const int MAX_DISTANCE = 80;
 const int WALL_DISTANCE = 40;
 
 // Ultrasonic pin config
@@ -136,29 +143,43 @@ void setup()
     compass.read();
     north = compass.getAzimuth();
 
+    // delay(5000);
+
     // Turn right until (right == true)
-    Serial.println("Turn right until compass is East");
-    turn_right();
+    // Serial.println("Turn right until compass is East");
+    // turn_right();
 }
 
 void loop()
 {
-    Serial.println("Brain looping");
-    int *ultrasonic_dist_arr = get_ultrasonic_dist();
-    show_distance(ultrasonic_dist_arr);
+    // data.l_motor_duty_cycle = 0.5;
+    // data.r_motor_duty_cycle = 0.5;
+    // data.command = "forward long";
+    // data.angle = 0;
+    // esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
 
-    while (millis() - start_time < 180000)
-    {
-        forward();
-        turn_left();
-        forward(2);
-        turn_left();
+    forward();
+    data.command = "Forward ended";
+    esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
 
-        forward();
-        turn_right();
-        forward(2);
-        turn_right();
-    }
+    // Serial.println("Brain looping");
+    // int *ultrasonic_dist_arr = get_ultrasonic_dist();
+    // show_distance(ultrasonic_dist_arr);
+    // data.command = "Does loop run?";
+    // esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
+
+    // while (millis() - start_time < 180000)
+    // {
+    //     forward();
+    //     turn_left();
+    //     forward(2);
+    //     turn_left();
+
+    //     forward();
+    //     turn_right();
+    //     forward(2);
+    //     turn_right();
+    // }
 
     // Execute go home function
 
@@ -221,8 +242,9 @@ float mapfloat(float x, float in_min, float in_max, float out_min, float out_max
 void forward()
 {
     Serial.println("Forward all the way");
-    data.l_motor_duty_cycle = 50;
-    data.r_motor_duty_cycle = 50;
+    data.l_motor_duty_cycle = 0.15;
+    data.r_motor_duty_cycle = 0.15;
+    data.command = "forward long";
     esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
 
     int start_angle = compass.getAzimuth(); // Change to read the compass angle
@@ -230,10 +252,19 @@ void forward()
     while ((dist == 0) || (dist > WALL_DISTANCE))
     {
         int angle_offset = get_angle(start_angle);
-        float proportional = mapfloat(angle_offset, -45, 45, -5, 5);
+        float proportional = mapfloat(angle_offset, -45, 45, -0.01, 0.01);
 
         data.l_motor_duty_cycle += proportional;
         data.r_motor_duty_cycle -= proportional;
+        if (data.l_motor_duty_cycle > MAX_SPEED)
+            data.l_motor_duty_cycle = MAX_SPEED;
+        if (data.l_motor_duty_cycle < -MAX_SPEED)
+            data.l_motor_duty_cycle = -MAX_SPEED;
+        if (data.r_motor_duty_cycle > MAX_SPEED)
+            data.r_motor_duty_cycle = MAX_SPEED;
+        if (data.r_motor_duty_cycle < -MAX_SPEED)
+            data.r_motor_duty_cycle = -MAX_SPEED;
+
         esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
 
         delay(100);
@@ -247,19 +278,19 @@ void forward()
 void forward(unsigned long time)
 {
     Serial.println("Foward for " + String(time));
-    data.l_motor_duty_cycle = 50;
-    data.r_motor_duty_cycle = 50;
+    data.l_motor_duty_cycle = 0.5;
+    data.r_motor_duty_cycle = 0.5;
+    data.command = "forward short";
     esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
 
     compass.read();
     int start_angle = compass.getAzimuth();
-    ;
     unsigned long start = millis();
     while (millis() - start <= time)
     {
-        int angle_offset = get_angle(start_angle);
+        data.angle = get_angle(start_angle);
 
-        float proportional = mapfloat(angle_offset, -45, 45, -5, 5);
+        float proportional = mapfloat(data.angle, -45, 45, -0.05, 0.05);
 
         data.l_motor_duty_cycle += proportional;
         data.r_motor_duty_cycle -= proportional;
@@ -274,7 +305,8 @@ void turn_left()
     Serial.println("Turn left");
 
     data.l_motor_duty_cycle = 0;
-    data.r_motor_duty_cycle = 50;
+    data.r_motor_duty_cycle = 0.5;
+    data.command = "Turn left";
     esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
 
     compass.read();
@@ -292,8 +324,9 @@ void turn_right()
 {
     Serial.print("Turning right");
 
-    data.l_motor_duty_cycle = 50;
+    data.l_motor_duty_cycle = 0.5;
     data.r_motor_duty_cycle = 0;
+    data.command = "Turn right";
     esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
 
     compass.read();
@@ -303,6 +336,8 @@ void turn_right()
     {
         // Serial.print(".");
         angle_offset = get_angle(start_angle);
+        data.angle = angle_offset;
+        esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
         // Serial.print(angle_offset);
         delay(100);
     }
@@ -313,6 +348,7 @@ void stop()
 {
     data.l_motor_duty_cycle = 0;
     data.r_motor_duty_cycle = 0;
+    data.command = "Stop";
     esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
 }
 

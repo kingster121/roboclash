@@ -35,6 +35,7 @@ typedef struct struct_message
     int ultrasonic2;
     int ultrasonic3;
     int angle;
+    String command;
 } struct_message;
 
 struct_message data;
@@ -88,12 +89,12 @@ NewPing sonar_left(TRIGGER_PIN_3, ECHO_PIN_3, MAX_DISTANCE);
 // float mapfloat(float x, float in_min, float in_max, float out_min, float out_max);
 
 // //-------------- Essential functions ---------------//
-// void forward(); // Returns array[2] = {l_motor_duty_cycle, r_motor_duty_cycle}
-// void forward(unsigned long time);
-// void turn_left();
-// void turn_right();
-// void stop();
-// void go_home();
+void forward(); // Returns array[2] = {l_motor_duty_cycle, r_motor_duty_cycle}
+void forward(unsigned long time);
+void turn_left();
+void turn_right();
+void stop();
+void go_home();
 
 // Programme start timer
 unsigned long start_time = millis();
@@ -131,16 +132,18 @@ void setup()
 
     // Compass initialisation and calibration
     compass.init();
-    compass.setCalibration(-1227, 920, -1190, 1457, -5683, -3171);
+    compass.setCalibration(-1361, 1820, -1545, 1727, -1276, 1708);
 
     // Get the true-north
     Serial.println("Get what degree is the true-north");
     compass.read();
     north = compass.getAzimuth();
 
+    delay(10000);
+
     // // Turn right until (right == true)
-    // Serial.println("Turn right until compass is East");
-    // turn_right();
+    Serial.println("Turn right until compass is East");
+    turn_right();
 }
 
 void loop()
@@ -150,24 +153,34 @@ void loop()
     data.ultrasonic2 = sonar_front.ping_cm();
     data.ultrasonic3 = sonar_left.ping_cm();
     data.angle = get_angle(north);
+    data.command = "NIL";
     esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
 
-    // Serial.println("Brain looping");
-    // int *ultrasonic_dist_arr = get_ultrasonic_dist();
-    // show_distance(ultrasonic_dist_arr);
+    Serial.print("Ultrasonic1: ");
+    Serial.println(data.ultrasonic1);
+    Serial.print("Ultrasonic2: ");
+    Serial.println(data.ultrasonic2);
+    Serial.print("Ultrasonic3: ");
+    Serial.println(data.ultrasonic3);
+    Serial.print("Angle: ");
+    Serial.println(data.angle);
 
-    // while (millis() - start_time < 180000)
-    // {
-    //     forward();
-    //     turn_left();
-    //     forward(2);
-    //     turn_left();
+    Serial.println("Brain looping");
+    int *ultrasonic_dist_arr = get_ultrasonic_dist();
+    show_distance(ultrasonic_dist_arr);
 
-    //     forward();
-    //     turn_right();
-    //     forward(2);
-    //     turn_right();
-    // }
+    while (millis() - start_time < 180000)
+    {
+        forward();
+        turn_left();
+        forward(2);
+        turn_left();
+
+        forward();
+        turn_right();
+        forward(2);
+        turn_right();
+    }
 
     // Execute go home function
 
@@ -189,36 +202,36 @@ void loop()
 */
 
 //--------------- Helper functions -----------------//
-// int *get_ultrasonic_dist()
-// {
-//     static int distanceArray[4];
-//     distanceArray[0] = sonar_right.ping_cm();
-//     distanceArray[1] = sonar_front.ping_cm();
-//     distanceArray[2] = sonar_left.ping_cm();
-//     distanceArray[3] = sonar_back.ping_cm();
+int *get_ultrasonic_dist()
+{
+    static int distanceArray[4];
+    distanceArray[0] = sonar_right.ping_cm();
+    distanceArray[1] = sonar_front.ping_cm();
+    distanceArray[2] = sonar_left.ping_cm();
+    // distanceArray[3] = sonar_back.ping_cm();
 
-//     return distanceArray; // Returns pointer to the array
-// }
+    return distanceArray; // Returns pointer to the array
+}
 
-// void show_distance(int *ultrasonic_dist_arr)
-// {
-//     for (int i = 0; i < 4; i++)
-//     {
-//         int dist = ultrasonic_dist_arr[i];
-//         if (i == 0)
-//             Serial.print("Right: ");
-//         else if (i == 1)
-//             Serial.print("\tFront: ");
-//         else if (i == 2)
-//             Serial.print("\tLeft: ");
-//         else if (i == 3)
-//             Serial.print("\tBack: ");
+void show_distance(int *ultrasonic_dist_arr)
+{
+    for (int i = 0; i < 4; i++)
+    {
+        int dist = ultrasonic_dist_arr[i];
+        if (i == 0)
+            Serial.print("Right: ");
+        else if (i == 1)
+            Serial.print("\tFront: ");
+        else if (i == 2)
+            Serial.print("\tLeft: ");
+        else if (i == 3)
+            Serial.print("\tBack: ");
 
-//         Serial.print(dist);
-//         Serial.print("cm");
-//     }
-//     Serial.println();
-// }
+        Serial.print(dist);
+        Serial.print("cm");
+    }
+    Serial.println();
+}
 
 // float mapfloat(float x, float in_min, float in_max, float out_min, float out_max)
 // {
@@ -227,3 +240,114 @@ void loop()
 // // --------- End of Helper Functions ---------------//
 
 // //-------------- Essential functions ---------------//
+void forward()
+{
+    Serial.println("Forward all the way");
+    data.l_motor_duty_cycle = 50;
+    data.r_motor_duty_cycle = 50;
+    esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
+
+    int start_angle = compass.getAzimuth(); // Change to read the compass angle
+    int dist = sonar_front.ping_cm();
+    while ((dist == 0) || (dist > WALL_DISTANCE))
+    {
+        int angle_offset = get_angle(start_angle);
+        float proportional = mapfloat(angle_offset, -45, 45, -5, 5);
+
+        data.l_motor_duty_cycle += proportional;
+        data.r_motor_duty_cycle -= proportional;
+        esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
+
+        delay(100);
+
+        dist = sonar_front.ping_cm();
+    }
+
+    stop();
+}
+
+void forward(unsigned long time)
+{
+    Serial.println("Foward for " + String(time));
+    data.l_motor_duty_cycle = 50;
+    data.r_motor_duty_cycle = 50;
+    esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
+
+    compass.read();
+    int start_angle = compass.getAzimuth();
+    ;
+    unsigned long start = millis();
+    while (millis() - start <= time)
+    {
+        int angle_offset = get_angle(start_angle);
+
+        float proportional = mapfloat(angle_offset, -45, 45, -5, 5);
+
+        data.l_motor_duty_cycle += proportional;
+        data.r_motor_duty_cycle -= proportional;
+        esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
+
+        delay(100);
+    }
+}
+
+void turn_left()
+{
+    Serial.println("Turn left");
+
+    data.l_motor_duty_cycle = 0;
+    data.r_motor_duty_cycle = 50;
+    esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
+
+    compass.read();
+    int start_angle = compass.getAzimuth();
+    int angle_offset = 0;
+    while (angle_offset < 90)
+    {
+        angle_offset = get_angle(start_angle);
+        delay(100);
+    }
+
+    stop();
+}
+void turn_right()
+{
+    Serial.print("Turning right");
+
+    data.l_motor_duty_cycle = 50;
+    data.r_motor_duty_cycle = 0;
+    esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
+
+    compass.read();
+    int start_angle = compass.getAzimuth();
+    int angle_offset = 0;
+    while (angle_offset > -90)
+    {
+        // Serial.print(".");
+        angle_offset = get_angle(start_angle);
+        // Serial.print(angle_offset);
+        delay(100);
+    }
+
+    stop();
+}
+void stop()
+{
+    data.l_motor_duty_cycle = 0;
+    data.r_motor_duty_cycle = 0;
+    esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
+}
+
+void go_home()
+{
+    /*
+    1. Go north until
+    2. Front sense wall
+    3. Check if left senses wall also
+        3.1. If left sense no wall, turn left and go straight until front hits wall. Go back to (1).
+        3.2. Else already already at airlock, deposit loot and terminate programme
+    */
+
+    // Turn until facing north
+}
+// --------End of Essential functions --------------//
