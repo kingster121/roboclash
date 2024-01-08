@@ -1,9 +1,5 @@
 // Basic demo for accelerometer readings from Adafruit MPU6050
 
-// ESP32 Guide: https://RandomNerdTutorials.com/esp32-mpu-6050-accelerometer-gyroscope-arduino/
-// ESP8266 Guide: https://RandomNerdTutorials.com/esp8266-nodemcu-mpu-6050-accelerometer-gyroscope-arduino/
-// Arduino Guide: https://RandomNerdTutorials.com/arduino-mpu-6050-accelerometer-gyroscope/
-
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
 #include <Wire.h>
@@ -64,7 +60,7 @@ void setup(void)
         break;
     }
 
-    mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);
+    mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
     Serial.print("Filter bandwidth set to: ");
     switch (mpu.getFilterBandwidth())
     {
@@ -97,6 +93,7 @@ void setup(void)
 
 void loop()
 {
+
     /* Get new sensor events with the readings */
     sensors_event_t a, g, temp;
     mpu.getEvent(&a, &g, &temp);

@@ -4,3 +4,6 @@ E0: 24:62:AB:E0:EF:F0
 
 Past calibration
 compass.setCalibration(-1227, 920, -1190, 1457, -5683, -3171);
+
+Serial.println("AccX: " + String(AccX) + "\tAccY: " + String(AccY) + "\tAccZ" + String(AccZ));
+Serial.println("GyroX: " + String(GyroX) + "\tGyroY: " + String(GyroY) + "\tGyroZ: " + String(GyroZ));

@@ -2,6 +2,9 @@
 #include <WiFi.h>
 #include <esp_now.h>
 #include <Wire.h>
+#include <SPI.h>
+
+int currentTime = 0;
 
 // RX adddress
 uint8_t broadcast_address1[] = {0x24, 0x62, 0xAB, 0xE0, 0xEF, 0xF0};
@@ -50,7 +53,7 @@ void setup()
     WiFi.mode(WIFI_STA);
     if (esp_now_init() != ESP_OK)
     {
-        Serial.println("Error initializing ESP-NOW");
+        //     Serial.println("Error initializing ESP-NOW");
         return;
     }
 
@@ -70,10 +73,11 @@ void setup()
     pinMode(D7, OUTPUT);
 
     // Front spinner will always spin inwards
-    digitalWrite(D5, HIGH);
-    digitalWrite(D6, LOW);
+    digitalWrite(D5, LOW);
+    digitalWrite(D6, HIGH);
 
     Serial.begin(115200);
+    currentTime = millis();
 }
 
 void loop()
@@ -137,11 +141,15 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
     memcpy(&data, incomingData, sizeof(data));
     // Serial.print("Bytes received: ");
     // Serial.println(len);
-    Serial.print("l_motor_duty_cycle: ");
-    Serial.println(data.l_motor_duty_cycle);
-    Serial.print("r_motor_duty_cycle: ");
-    Serial.println(data.r_motor_duty_cycle);
-    Serial.println();
+    // Serial.print("l_motor_duty_cycle: ");
+    // Serial.println(data.l_motor_duty_cycle);
+    // Serial.print("r_motor_duty_cycle: ");
+    // Serial.println(data.r_motor_duty_cycle);
+    // Serial.println();
+    // Serial.println("time: ");
+    // int pastTime = currentTime;
+    // pastTime = millis();
+    // Serial.println(String(pastTime - currentTime));
 
     moveMotors(data.l_motor_duty_cycle, data.r_motor_duty_cycle);
 }

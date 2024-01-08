@@ -1,28 +1,34 @@
+// Basic demo for accelerometer readings from Adafruit MPU6050
+
 #include <Arduino.h>
-#include <NewPing.h>
+#include <Adafruit_MPU6050.h>
 #include <esp_now.h>
 #include <WiFi.h>
-#include <Wire.h>
-#include <QMC5883LCompass.h>
 
-// Compass
-QMC5883LCompass compass;
-int north;
-int get_angle(int base_north)
-{
-    compass.read();
-    int current_angle = compass.getAzimuth();
-    int azimuth = current_angle - base_north;
-    if (azimuth < -180)
-        azimuth = 360 + azimuth;
-    if (azimuth > 180)
-        azimuth = azimuth - 360;
+// control pins for left and right motors
+const float leftSpeed = 0; // means pin 9 on the Arduino controls the speed of left motor
+const float rightSpeed = 0;
 
-    // Serial.print("North:" + String(north) + "\t");
-    // Serial.print("Current Angle: " + String(current_angle) + "\t");
-    // Serial.println("Azimuth: " + String(azimuth) + "\t");
-    return azimuth;
-}
+const int MPU = 0x68;                                                      // MPU6050 I2C address
+float AccX, AccY, AccZ;                                                    // linear acceleration
+float GyroX, GyroY, GyroZ;                                                 // angular velocity
+float accAngleX, accAngleY, accAngleZ, gyroAngleX, gyroAngleY, gyroAngleZ; // used in void loop()
+float roll, pitch, yaw;
+float AccErrorX, AccErrorY, AccErrorZ, GyroErrorX, GyroErrorY, GyroErrorZ;
+float elapsedTime, currentTime, previousTime;
+int c = 0;
+
+const float maxSpeed = 0.3; // max PWM value written to motor speed pin. It is typically 255.
+const float minSpeed = 0.1; // min PWM value at which motor moves
+int angle;                  // due to how I orientated my MPU6050 on my car, angle = roll
+int targetAngle = 0;
+int equilibriumSpeed = 248; // rough estimate of PWM at the speed pin of the stronger motor, while driving straight
+// and weaker motor at maxSpeed
+float leftSpeedVal;
+float rightSpeedVal;
+bool isDriving = false;    // it the car driving forward OR rotate/stationary
+bool prevIsDriving = true; // equals isDriving in the previous iteration of void loop()
+bool paused = false;       // is the program paused
 
 // (RX) ESP MAC address
 uint8_t broadcast_address1[] = {0xB0, 0xA7, 0x32, 0x2B, 0x6E, 0x24};
@@ -31,11 +37,10 @@ uint8_t broadcast_address2[] = {0x24, 0x62, 0xAB, 0xE0, 0xEF, 0xF0};
 // ESP NOW message struct
 typedef struct struct_message
 {
-    int ultrasonic1;
-    int ultrasonic2;
-    int ultrasonic3;
-    int angle;
+    float l_motor_duty_cycle;
+    float r_motor_duty_cycle;
     String command;
+    int angle;
 } struct_message;
 
 struct_message data;
@@ -55,299 +60,429 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
     // Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
     // Serial.println("l_motor: " + String(data.l_motor_duty_cycle));
     // Serial.println("r_motor: " + String(data.r_motor_duty_cycle));
+    // Serial.println("command: " + String(data.command));
+    // Serial.println("angle: " + String(data.angle));
 }
 
-// Max distance for ultrasonic
-const int MAX_DISTANCE = 50;
-const int WALL_DISTANCE = 40;
+Adafruit_MPU6050 mpu;
 
-// Ultrasonic pin config
-const int TRIGGER_PIN_1 = 23;
-const int ECHO_PIN_1 = 19;
+// Functions
+void readIMU();
+void calculateError();
+float changeSpeed(float motorSpeed, float increment);
+void controlSpeed();
+void driving();
 
-const int TRIGGER_PIN_2 = 5;
-const int ECHO_PIN_2 = 18;
-
-const int TRIGGER_PIN_3 = 33;
-const int ECHO_PIN_3 = 35;
-
-// const int TRIGGER_PIN_4 = 23;
-// const int ECHO_PIN_4 = 19;
-
-// Initialise Newping Object (Ultrasonics)
-NewPing sonar_right(TRIGGER_PIN_1, ECHO_PIN_1, MAX_DISTANCE);
-NewPing sonar_front(TRIGGER_PIN_2, ECHO_PIN_2, MAX_DISTANCE);
-NewPing sonar_left(TRIGGER_PIN_3, ECHO_PIN_3, MAX_DISTANCE);
-// NewPing sonar_back(TRIGGER_PIN_4, ECHO_PIN_4, MAX_DISTANCE);
-
-// IMU - I2C address 0x68
-// Nothing for now
-
-//--------------- Helper functions -----------------//
-// int *get_ultrasonic_dist(); // Returns array[4] = {right, front, left, back}
-// void show_distance(int *ultrasonic_dist_arr);
-// float mapfloat(float x, float in_min, float in_max, float out_min, float out_max);
-
-// //-------------- Essential functions ---------------//
-void forward(); // Returns array[2] = {l_motor_duty_cycle, r_motor_duty_cycle}
-void forward(unsigned long time);
-void turn_left();
-void turn_right();
-void stop();
-void go_home();
-
-// Programme start timer
-unsigned long start_time = millis();
-
-//--------------- ESP32 Logic ----------------------//
-void setup()
+void setup(void)
 {
     Serial.begin(115200);
+    Serial.println("Adafruit MPU6050 test!");
 
-    // ESP_NOW
-    WiFi.mode(WIFI_STA);
-    if (esp_now_init() != ESP_OK)
+    // Try to initialize!
+    // if (!mpu.begin())
+    // {
+    //     Serial.println("Failed to find MPU6050 chip");
+    //     while (1)
+    //     {
+    //         delay(10);
+    //     }
+    // }
+    Serial.println("MPU6050 Found!");
+
+    mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+    Serial.print("Accelerometer range set to: ");
+    switch (mpu.getAccelerometerRange())
     {
-        Serial.println("Error initialising ESP_NOW");
-        return;
+    case MPU6050_RANGE_2_G:
+        Serial.println("+-2G");
+        break;
+    case MPU6050_RANGE_4_G:
+        Serial.println("+-4G");
+        break;
+    case MPU6050_RANGE_8_G:
+        Serial.println("+-8G");
+        break;
+    case MPU6050_RANGE_16_G:
+        Serial.println("+-16G");
+        break;
     }
-    esp_now_register_send_cb(OnDataSent);
-    // Register peer
-    peerInfo.channel = 0;
-    peerInfo.encrypt = false;
-    // Register first peer
-    memcpy(peerInfo.peer_addr, broadcast_address1, 6);
-    if (esp_now_add_peer(&peerInfo) != ESP_OK)
+    mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+    Serial.print("Gyro range set to: ");
+    switch (mpu.getGyroRange())
     {
-        Serial.println("Failed to add peer");
-        return;
+    case MPU6050_RANGE_250_DEG:
+        Serial.println("+- 250 deg/s");
+        break;
+    case MPU6050_RANGE_500_DEG:
+        Serial.println("+- 500 deg/s");
+        break;
+    case MPU6050_RANGE_1000_DEG:
+        Serial.println("+- 1000 deg/s");
+        break;
+    case MPU6050_RANGE_2000_DEG:
+        Serial.println("+- 2000 deg/s");
+        break;
     }
-    // Register second peer
-    memcpy(peerInfo.peer_addr, broadcast_address2, 6);
-    if (esp_now_add_peer(&peerInfo) != ESP_OK)
+
+    mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+    Serial.print("Filter bandwidth set to: ");
+    switch (mpu.getFilterBandwidth())
     {
-        Serial.println("Failed to add peer");
-        return;
+    case MPU6050_BAND_260_HZ:
+        Serial.println("260 Hz");
+        break;
+    case MPU6050_BAND_184_HZ:
+        Serial.println("184 Hz");
+        break;
+    case MPU6050_BAND_94_HZ:
+        Serial.println("94 Hz");
+        break;
+    case MPU6050_BAND_44_HZ:
+        Serial.println("44 Hz");
+        break;
+    case MPU6050_BAND_21_HZ:
+        Serial.println("21 Hz");
+        break;
+    case MPU6050_BAND_10_HZ:
+        Serial.println("10 Hz");
+        break;
+    case MPU6050_BAND_5_HZ:
+        Serial.println("5 Hz");
+        break;
     }
 
-    // Compass initialisation and calibration
-    compass.init();
-    compass.setCalibration(-1361, 1820, -1545, 1727, -1276, 1708);
+    Serial.println("");
+    delay(100);
 
-    // Get the true-north
-    Serial.println("Get what degree is the true-north");
-    compass.read();
-    north = compass.getAzimuth();
-
-    delay(10000);
-
-    // // Turn right until (right == true)
-    Serial.println("Turn right until compass is East");
-    turn_right();
+    calculateError();
+    delay(20);
+    currentTime = micros();
 }
 
 void loop()
 {
-    // int *ultrasonic_dist_arr = get_ultrasonic_dist();
-    data.ultrasonic1 = sonar_right.ping_cm();
-    data.ultrasonic2 = sonar_front.ping_cm();
-    data.ultrasonic3 = sonar_left.ping_cm();
-    data.angle = get_angle(north);
-    data.command = "NIL";
+    readIMU();
+
+    // ------- Caculate roll and pitch from acceleration -------- //
+    accAngleX = (atan(AccY / sqrt(pow(AccX, 2) + pow(AccZ, 2))) * 180 / PI) - AccErrorX; // AccErrorX is calculated in the calculateError() function
+    accAngleY = (atan(-1 * AccX / sqrt(pow(AccY, 2) + pow(AccZ, 2))) * 180 / PI) - AccErrorY;
+
+    previousTime = currentTime;
+    currentTime = micros();
+    elapsedTime = (currentTime - previousTime) / 1000000; // Divide by 1000 to get seconds
+
+    // Correct the outputs with the calculated error values
+    GyroX -= GyroErrorX; // GyroErrorX is calculated in the calculateError() function
+    GyroY -= GyroErrorY;
+    GyroZ -= GyroErrorZ;
+
+    // Serial.println("accAngleX: " + String(accAngleX) + "accAngleY: " + String(accAngleY));
+    // Serial.println("GyroX: " + String(GyroX) + "GyroY: " + String(GyroY) + "GyroZ: " + String(GyroZ));
+
+    delay(100);
+    // // Currently the raw values are in degrees per seconds, deg/s, so we need to multiply by sendonds (s) to get the angle in degrees
+    gyroAngleX += GyroX * elapsedTime; // deg/s * s = deg
+    gyroAngleY += GyroY * elapsedTime;
+    yaw += GyroZ * elapsedTime;
+    // // // combine accelerometer- and gyro-estimated angle values. 0.96 and 0.04 values are determined through trial and error by other people
+    roll = 0.96 * gyroAngleX + 0.04 * accAngleX;
+    pitch = 0.96 * gyroAngleY + 0.04 * accAngleY;
+    angle = roll; // if you mounted MPU6050 in a different orientation to me, angle may not = roll. It can roll, pitch, yaw or minus version of the three
+    //               // for me, turning right reduces angle. Turning left increases angle.
+
+    // // Forward
+    targetAngle = 0;
+
+    driving();
+
+    // // Print the values on the serial monitor
+    // if (Serial.available())
+    // {
+    //     char c = Serial.read();
+    //     if (c == 'w')
+    //     { // drive forward
+    //         Serial.println("forward");
+    //         isDriving = true;
+    //     }
+    //     else if (c == 'a')
+    //     { // turn left
+    //         Serial.println("left");
+    //         targetAngle += 90;
+    //         if (targetAngle > 180)
+    //         {
+    //             targetAngle -= 360;
+    //         }
+    //         isDriving = false;
+    //     }
+    //     else if (c == 'd')
+    //     { // turn right
+    //         Serial.println("right");
+    //         targetAngle -= 90;
+    //         if (targetAngle <= -180)
+    //         {
+    //             targetAngle += 360;
+    //         }
+    //         isDriving = false;
+    //     }
+    //     else if (c == 'q')
+    //     { // stop or brake
+    //         Serial.println("stop");
+    //         isDriving = false;
+    //     }
+    //     else if (c == 'i')
+    //     { // print information. When car is stationary, GyroX should approx. = 0.
+    //         Serial.print("angle: ");
+    //         Serial.println(angle);
+    //         Serial.print("targetAngle: ");
+    //         Serial.println(targetAngle);
+    //         Serial.print("GyroX: ");
+    //         Serial.println(GyroX);
+    //         Serial.print("elapsedTime (in ms): "); // estimates time to run void loop() once
+    //         Serial.println(elapsedTime * pow(10, 3));
+    //         Serial.print("equilibriumSpeed: ");
+    //         Serial.println(equilibriumSpeed);
+    //     }
+    //     else if (c == 'p')
+    //     { // pause the program
+    //         paused = !paused;
+    //         stopCar();
+    //         isDriving = false;
+    //         Serial.println("key p was pressed, which pauses/unpauses the program");
+    //     }
+    // }
+
+    // static int count;
+    // static int countStraight;
+    // if (count < 6)
+    // {
+    //     count++;
+    // }
+    // else
+    // { // runs once after void loop() runs 7 times. void loop runs about every 2.8ms, so this else condition runs every 19.6ms or 50 times/second
+    //     count = 0;
+    //     if (!paused)
+    //     {
+    //         if (isDriving != prevIsDriving)
+    //         {
+    //             leftSpeedVal = equilibriumSpeed;
+    //             countStraight = 0;
+    //             Serial.print("mode changed, isDriving: ");
+    //             Serial.println(isDriving);
+    //         }
+    //         if (isDriving)
+    //         {
+    //             if (abs(targetAngle - angle) < 3)
+    //             {
+    //                 if (countStraight < 20)
+    //                 {
+    //                     countStraight++;
+    //                 }
+    //                 else
+    //                 {
+    //                     countStraight = 0;
+    //                     equilibriumSpeed = leftSpeedVal; // to find equilibrium speed, 20 consecutive readings need to indicate car is going straight
+    //                     Serial.print("EQUILIBRIUM reached, equilibriumSpeed: ");
+    //                     Serial.println(equilibriumSpeed);
+    //                 }
+    //             }
+    //             else
+    //             {
+    //                 countStraight = 0;
+    //             }
+    //             driving();
+    //         }
+    //         else
+    //         {
+    //             rotate();
+    //         }
+    //         prevIsDriving = isDriving;
+    //     }
+    // }
+}
+
+void driving()
+{                                         // called by void loop(), which isDriving = true
+    int deltaAngle = targetAngle - angle; // rounding is neccessary, since you never get exact values in reality
+    // forward();
+    data.l_motor_duty_cycle = leftSpeedVal;
+    data.r_motor_duty_cycle = rightSpeedVal;
+    data.command = "Forward";
+    data.angle = deltaAngle;
     esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
 
-    Serial.print("Ultrasonic1: ");
-    Serial.println(data.ultrasonic1);
-    Serial.print("Ultrasonic2: ");
-    Serial.println(data.ultrasonic2);
-    Serial.print("Ultrasonic3: ");
-    Serial.println(data.ultrasonic3);
-    Serial.print("Angle: ");
-    Serial.println(data.angle);
-
-    Serial.println("Brain looping");
-    int *ultrasonic_dist_arr = get_ultrasonic_dist();
-    show_distance(ultrasonic_dist_arr);
-
-    while (millis() - start_time < 180000)
+    Serial.println("L_MOTOR: " + String(data.l_motor_duty_cycle) + "\tR_MOTOR: " + String(data.r_motor_duty_cycle));
+    if (deltaAngle != 0)
     {
-        forward();
-        turn_left();
-        forward(2);
-        turn_left();
+        controlSpeed();
+        // data.l_motor_duty_cycle = leftSpeedVal;
+        // data.r_motor_duty_cycle = rightSpeedVal;
+        // data.command = "Forward";
+        // data.angle = deltaAngle;
+        // esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
 
-        forward();
-        turn_right();
-        forward(2);
-        turn_right();
+        // Serial.println("L_MOTOR: " + String(data.l_motor_duty_cycle) + "\tR_MOTOR: " + String(data.r_motor_duty_cycle));
     }
-
-    // Execute go home function
-
-    delay(1000);
 }
 
-// Pseudo-code
-/*
-- Start by turning right 90 deg
-- loop until either (time left 90s) OR (?):
-    go straight until (front == true)
-    turn left 90 deg or until (right== true)
-    then move forward for 2s
-    turn left 90 deg or until (back == true)
-    go straight until (front == true)
-    turn right 90 deg or until (left == true)
-    then move forward for 2s
-    turn right 90 deg or until (back == true)
-*/
+void controlSpeed()
+{ // this function is called by driving ()
+    int deltaAngle = round(targetAngle - angle);
+    int targetGyroX;
 
-//--------------- Helper functions -----------------//
-int *get_ultrasonic_dist()
-{
-    static int distanceArray[4];
-    distanceArray[0] = sonar_right.ping_cm();
-    distanceArray[1] = sonar_front.ping_cm();
-    distanceArray[2] = sonar_left.ping_cm();
-    // distanceArray[3] = sonar_back.ping_cm();
+    // setting up propoertional control, see Step 3 on the website
+    if (deltaAngle > 30)
+        targetGyroX = 60;
+    else if (deltaAngle < -30)
+        targetGyroX = -60;
+    else
+        targetGyroX = 2 * deltaAngle;
 
-    return distanceArray; // Returns pointer to the array
-}
-
-void show_distance(int *ultrasonic_dist_arr)
-{
-    for (int i = 0; i < 4; i++)
+    if (round(targetGyroX - GyroX) == 0)
+        ;
+    else if (targetGyroX > GyroX)
     {
-        int dist = ultrasonic_dist_arr[i];
-        if (i == 0)
-            Serial.print("Right: ");
-        else if (i == 1)
-            Serial.print("\tFront: ");
-        else if (i == 2)
-            Serial.print("\tLeft: ");
-        else if (i == 3)
-            Serial.print("\tBack: ");
-
-        Serial.print(dist);
-        Serial.print("cm");
+        leftSpeedVal = changeSpeed(leftSpeedVal, -0.001); // would increase GyroX
+        rightSpeedVal = changeSpeed(rightSpeed, 0.001);
     }
-    Serial.println();
+    else
+    {
+        leftSpeedVal = changeSpeed(leftSpeedVal, 0.001);
+        rightSpeedVal = changeSpeed(leftSpeedVal, -0.001);
+    }
 }
 
-// float mapfloat(float x, float in_min, float in_max, float out_min, float out_max)
-// {
-//     return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+// void rotate()
+// { // called by void loop(), which isDriving = false
+//     int deltaAngle = round(targetAngle - angle);
+//     int targetGyroX;
+//     if (abs(deltaAngle) <= 1)
+//     {
+//         stopCar();
+//     }
+//     else
+//     {
+//         if (angle > targetAngle)
+//         { // turn left
+//             left();
+//         }
+//         else if (angle < targetAngle)
+//         { // turn right
+//             right();
+//         }
+
+//         // setting up propoertional control, see Step 3 on the website
+//         if (abs(deltaAngle) > 30)
+//         {
+//             targetGyroX = 60;
+//         }
+//         else
+//         {
+//             targetGyroX = 2 * abs(deltaAngle);
+//         }
+
+//         if (round(targetGyroX - abs(GyroX)) == 0)
+//         {
+//             ;
+//         }
+//         else if (targetGyroX > abs(GyroX))
+//         {
+//             leftSpeedVal = changeSpeed(leftSpeedVal, +1); // would increase abs(GyroX)
+//         }
+//         else
+//         {
+//             leftSpeedVal = changeSpeed(leftSpeedVal, -1);
+//         }
+//         rightSpeedVal = leftSpeedVal;
+//         // analogWrite(rightSpeed, rightSpeedVal);
+//         // analogWrite(leftSpeed, leftSpeedVal);
+//     }
 // }
-// // --------- End of Helper Functions ---------------//
 
-// //-------------- Essential functions ---------------//
-void forward()
+float changeSpeed(float motorSpeed, float increment)
 {
-    Serial.println("Forward all the way");
-    data.l_motor_duty_cycle = 50;
-    data.r_motor_duty_cycle = 50;
-    esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
-
-    int start_angle = compass.getAzimuth(); // Change to read the compass angle
-    int dist = sonar_front.ping_cm();
-    while ((dist == 0) || (dist > WALL_DISTANCE))
+    motorSpeed += increment;
+    if (motorSpeed > maxSpeed)
+    { // to prevent motorSpeed from exceeding 255, which is a problem when using analogWrite
+        motorSpeed = maxSpeed;
+    }
+    else if (motorSpeed < minSpeed)
     {
-        int angle_offset = get_angle(start_angle);
-        float proportional = mapfloat(angle_offset, -45, 45, -5, 5);
+        motorSpeed = minSpeed;
+    }
+    return motorSpeed;
+}
 
-        data.l_motor_duty_cycle += proportional;
-        data.r_motor_duty_cycle -= proportional;
-        esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
+void calculateError()
+{
+    // Ensure robot is stationary and calculates the default offset
+    for (int c = 0; c < 200; c++)
+    {
+        AccErrorX += AccX;
+        AccErrorY += AccY;
+        AccErrorZ += AccZ;
 
-        delay(100);
-
-        dist = sonar_front.ping_cm();
+        GyroErrorX += GyroX;
+        GyroErrorY += GyroY;
+        GyroErrorZ += GyroZ;
     }
 
-    stop();
+    // Divide the sum by 200 to get the error value
+    AccErrorX = AccErrorX / 200;
+    AccErrorY = AccErrorY / 200;
+    AccErrorZ = AccErrorZ / 200;
+
+    GyroErrorX = GyroErrorX / 200;
+    GyroErrorY = GyroErrorY / 200;
+    GyroErrorZ = GyroErrorZ / 200;
+    Serial.println("The setting in MPU6050 has been calibrated");
 }
 
-void forward(unsigned long time)
+void readIMU()
 {
-    Serial.println("Foward for " + String(time));
-    data.l_motor_duty_cycle = 50;
-    data.r_motor_duty_cycle = 50;
-    esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
+    /* Get new sensor events with the readings */
+    sensors_event_t a, g, temp;
+    mpu.getEvent(&a, &g, &temp);
 
-    compass.read();
-    int start_angle = compass.getAzimuth();
-    ;
-    unsigned long start = millis();
-    while (millis() - start <= time)
-    {
-        int angle_offset = get_angle(start_angle);
+    /* Print out the values */
+    AccX = a.acceleration.x;
+    AccY = a.acceleration.y;
+    AccZ = a.acceleration.z;
 
-        float proportional = mapfloat(angle_offset, -45, 45, -5, 5);
-
-        data.l_motor_duty_cycle += proportional;
-        data.r_motor_duty_cycle -= proportional;
-        esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
-
-        delay(100);
-    }
+    GyroX = g.gyro.x;
+    GyroY = g.gyro.y;
+    GyroZ = g.gyro.z;
 }
 
-void turn_left()
-{
-    Serial.println("Turn left");
+// void forward()
+// {                               // drives the car forward, assuming leftSpeedVal and rightSpeedVal are set high enough
+//     digitalWrite(right1, HIGH); // the right motor rotates FORWARDS when right1 is HIGH and right2 is LOW
+//     digitalWrite(right2, LOW);
+//     digitalWrite(left1, HIGH);
+//     digitalWrite(left2, LOW);
+// }
 
-    data.l_motor_duty_cycle = 0;
-    data.r_motor_duty_cycle = 50;
-    esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
+// void left()
+// { // rotates the car left, assuming speed leftSpeedVal and rightSpeedVal are set high enough
+//     digitalWrite(right1, LOW);
+//     digitalWrite(right2, HIGH);
+//     digitalWrite(left1, HIGH);
+//     digitalWrite(left2, LOW);
+// }
 
-    compass.read();
-    int start_angle = compass.getAzimuth();
-    int angle_offset = 0;
-    while (angle_offset < 90)
-    {
-        angle_offset = get_angle(start_angle);
-        delay(100);
-    }
+// void right()
+// {
+//     digitalWrite(right1, HIGH);
+//     digitalWrite(right2, LOW);
+//     digitalWrite(left1, LOW);
+//     digitalWrite(left2, HIGH);
+// }
 
-    stop();
-}
-void turn_right()
-{
-    Serial.print("Turning right");
-
-    data.l_motor_duty_cycle = 50;
-    data.r_motor_duty_cycle = 0;
-    esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
-
-    compass.read();
-    int start_angle = compass.getAzimuth();
-    int angle_offset = 0;
-    while (angle_offset > -90)
-    {
-        // Serial.print(".");
-        angle_offset = get_angle(start_angle);
-        // Serial.print(angle_offset);
-        delay(100);
-    }
-
-    stop();
-}
-void stop()
-{
-    data.l_motor_duty_cycle = 0;
-    data.r_motor_duty_cycle = 0;
-    esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
-}
-
-void go_home()
-{
-    /*
-    1. Go north until
-    2. Front sense wall
-    3. Check if left senses wall also
-        3.1. If left sense no wall, turn left and go straight until front hits wall. Go back to (1).
-        3.2. Else already already at airlock, deposit loot and terminate programme
-    */
-
-    // Turn until facing north
-}
-// --------End of Essential functions --------------//
+// void stopCar()
+// {
+//     digitalWrite(right1, LOW);
+//     digitalWrite(right2, LOW);
+//     digitalWrite(left1, LOW);
+//     digitalWrite(left2, LOW);
+//     analogWrite(rightSpeed, 0);
+//     analogWrite(leftSpeed, 0);
+// }
