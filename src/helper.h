@@ -22,3 +22,8 @@ void cartesianToPolar(int xSquare, int ySquare, float &magnitude, float &angle)
     // Convert angle from radians to degrees if needed
     angle = angle * 180.0 / M_PI;
 }
+
+float mapfloat(float x, float in_min, float in_max, float out_min, float out_max)
+{
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}

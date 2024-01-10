@@ -121,13 +121,13 @@ void moveMotors(float l_duty_cycle, float r_duty_cycle)
 void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
 {
     memcpy(&data, incomingData, sizeof(data));
-    Serial.print("Bytes received: ");
-    Serial.println(len);
-    Serial.print("l_motor_duty_cycle: ");
-    Serial.println(data.l_motor_duty_cycle);
-    Serial.print("r_motor_duty_cycle: ");
-    Serial.println(data.r_motor_duty_cycle);
-    Serial.println();
+    // Serial.print("Bytes received: ");
+    // Serial.println(len);
+    // Serial.print("l_motor_duty_cycle: ");
+    // Serial.println(data.l_motor_duty_cycle);
+    // Serial.print("r_motor_duty_cycle: ");
+    // Serial.println(data.r_motor_duty_cycle);
+    // Serial.println();
 
     moveMotors(data.l_motor_duty_cycle, data.r_motor_duty_cycle);
 }

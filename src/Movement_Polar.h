@@ -50,29 +50,29 @@ public:
         //           << std::flush;
 
         // Split the joystick into 4 quadrants to determine motor spin speed
-        // if (angle <= 90 && angle > 0)
-        // {
-        //     l_motor_duty_cycle = 1.0;
-        //     r_motor_duty_cycle = sin(angle / 180.0 * M_PI);
-        // }
-        // else if (angle <= 180 && angle > 90)
-        // {
-        //     l_motor_duty_cycle = sin(angle / 180.0 * M_PI);
-        //     r_motor_duty_cycle = 1.0;
-        // }
-        // else if (angle <= -90 && angle > -180)
-        // {
-        //     l_motor_duty_cycle = sin(angle / 180.0 * M_PI);
-        //     r_motor_duty_cycle = -1.0;
-        // }
-        // else
-        // {
-        //     l_motor_duty_cycle = -1.0;
-        //     r_motor_duty_cycle = sin(angle / 180.0 * M_PI);
-        // }
+        if (angle <= 90 && angle > 0)
+        {
+            l_motor_duty_cycle = 1.0;
+            r_motor_duty_cycle = sin(angle / 180.0 * M_PI);
+        }
+        else if (angle <= 180 && angle > 90)
+        {
+            l_motor_duty_cycle = sin(angle / 180.0 * M_PI);
+            r_motor_duty_cycle = 1.0;
+        }
+        else if (angle <= -90 && angle > -180)
+        {
+            l_motor_duty_cycle = sin(angle / 180.0 * M_PI);
+            r_motor_duty_cycle = -1.0;
+        }
+        else
+        {
+            l_motor_duty_cycle = -1.0;
+            r_motor_duty_cycle = sin(angle / 180.0 * M_PI);
+        }
 
-        // l_motor_duty_cycle = l_motor_duty_cycle * magnitude / 100.0;
-        // r_motor_duty_cycle = r_motor_duty_cycle * magnitude / 100.0;
+        l_motor_duty_cycle = l_motor_duty_cycle * magnitude / 100.0;
+        r_motor_duty_cycle = r_motor_duty_cycle * magnitude / 100.0;
 
         return {l_motor_duty_cycle, r_motor_duty_cycle};
     }
