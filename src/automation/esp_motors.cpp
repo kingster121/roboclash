@@ -1,31 +1,31 @@
 #include <Arduino.h>
-#include <WiFi.h>
-#include <esp_now.h>
-#include <Wire.h>
-#include <SPI.h>
+// #include <WiFi.h>
+// #include <esp_now.h>
+// #include <Wire.h>
+// #include <SPI.h>
 
-int currentTime = 0;
+// int currentTime = 0;
 
-// RX adddress
-uint8_t broadcast_address1[] = {0x24, 0x62, 0xAB, 0xE0, 0xEF, 0xF0};
+// // RX adddress
+// uint8_t broadcast_address1[] = {0x24, 0x62, 0xAB, 0xE0, 0xEF, 0xF0};
 
-// Structure example to receive data
-// Must match the sender structure
-typedef struct struct_message
-{
-    float l_motor_duty_cycle;
-    float r_motor_duty_cycle;
-    String command;
-    int angle;
-} struct_message;
+// // Structure example to receive data
+// // Must match the sender structure
+// typedef struct struct_message
+// {
+//     float l_motor_duty_cycle;
+//     float r_motor_duty_cycle;
+//     String command;
+//     int angle;
+// } struct_message;
 
-// Create a struct_message called myData
-struct_message data;
+// // Create a struct_message called myData
+// struct_message data;
 
-esp_now_peer_info_t peerInfo;
+// esp_now_peer_info_t peerInfo;
 
-// callback function that will be executed when data is received
-void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len);
+// // callback function that will be executed when data is received
+// void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len);
 
 const int D0 = 21; // R_MOTOR
 const int D1 = 19; // R_MOTOR
@@ -49,18 +49,6 @@ void moveMotors(float l_duty_cycle, float r_duty_cycle);
 
 void setup()
 {
-    // Setting up WiFi
-    WiFi.mode(WIFI_STA);
-    if (esp_now_init() != ESP_OK)
-    {
-        //     Serial.println("Error initializing ESP-NOW");
-        return;
-    }
-
-    // Once ESPNow is successfully Init, we will register for recv CB to
-    // get recv packer info
-    esp_now_register_recv_cb(OnDataRecv);
-
     ledcSetup(L_MOTOR_CH, PWM_FREQ, PWM_RESOLUTION); // Configure PWM parameters for channel 0
     ledcSetup(R_MOTOR_CH, PWM_FREQ, PWM_RESOLUTION);
     pinMode(D0, OUTPUT);
@@ -77,11 +65,11 @@ void setup()
     digitalWrite(D6, HIGH);
 
     Serial.begin(115200);
-    currentTime = millis();
 }
 
 void loop()
 {
+    moveMotors
     // Serial.println("This is looping");
     // // Print latest valid values from all channels
     // for (byte channel = 1; channel <= channelAmount; ++channel)
@@ -126,8 +114,15 @@ void moveMotors(float l_duty_cycle, float r_duty_cycle)
         digitalWrite(D0, 0);
     }
 
-    l_duty_cycle = round(abs(l_duty_cycle) * MAX_PWM);
-    r_duty_cycle = round(abs(r_duty_cycle) * MAX_PWM);
+    if (l_duty_cycle == 0)
+        l_duty_cycle = 0;
+    else
+        l_duty_cycle = round(abs(l_duty_cycle) * MAX_PWM);
+
+    if (r_duty_cycle == 0)
+        r_duty_cycle = 0;
+    else
+        r_duty_cycle = round(abs(r_duty_cycle) * MAX_PWM);
 
     // Serial.println("l_duty_cycle: " + String(l_duty_cycle));
     // Serial.println("r_duty_cycle: " + String(r_duty_cycle));
@@ -136,20 +131,24 @@ void moveMotors(float l_duty_cycle, float r_duty_cycle)
     ledcWrite(R_MOTOR_CH, r_duty_cycle);
 }
 
-void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
-{
-    memcpy(&data, incomingData, sizeof(data));
-    // Serial.print("Bytes received: ");
-    // Serial.println(len);
-    // Serial.print("l_motor_duty_cycle: ");
-    // Serial.println(data.l_motor_duty_cycle);
-    // Serial.print("r_motor_duty_cycle: ");
-    // Serial.println(data.r_motor_duty_cycle);
-    // Serial.println();
-    // Serial.println("time: ");
-    // int pastTime = currentTime;
-    // pastTime = millis();
-    // Serial.println(String(pastTime - currentTime));
+// void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
+// {
 
-    moveMotors(data.l_motor_duty_cycle, data.r_motor_duty_cycle);
-}
+//     memcpy(&data, incomingData, sizeof(data));
+//     // Serial.print("Bytes received: ");
+//     // Serial.println(len);
+//     // Serial.print("l_motor_duty_cycle: ");
+//     // Serial.println(data.l_motor_duty_cycle);
+//     // Serial.print("r_motor_duty_cycle: ");
+//     // Serial.println(data.r_motor_duty_cycle);
+//     // Serial.println();
+//     // Serial.println("time: ");
+//     // int pastTime = currentTime;
+//     // pastTime = millis();
+//     // Serial.println(String(pastTime - currentTime));
+
+//     moveMotors(data.l_motor_duty_cycle, data.r_motor_duty_cycle);
+//     delay(50);
+//     moveMotors(0, 0);
+//     delay(100);
+// }

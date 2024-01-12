@@ -1,137 +1,106 @@
 #include <Arduino.h>
-#include <NewPing.h>
-#include <esp_now.h>
-#include <WiFi.h>
-#include <Wire.h>
+const int D0 = 21; // R_MOTOR
+const int D1 = 19; // R_MOTOR
+const int D2 = 18; // L_MOTOR
+const int D3 = 5;  // L_MOTOR
 
-// (RX) ESP MAC address
-uint8_t broadcast_address1[] = {0xB0, 0xA7, 0x32, 0x2B, 0x6E, 0x24};
-uint8_t broadcast_address2[] = {0x24, 0x62, 0xAB, 0xE0, 0xEF, 0xF0};
+// Spinners --- 4 and 5 are for front spinner --- 6 and 7 is for the top thigny
+const int D4 = 23;
+const int D5 = 22;
+const int D6 = 1;
+const int D7 = 3;
 
-// ESP NOW message struct
-typedef struct struct_message
+const int L_MOTOR_CH = 0; // Choose a PWM channel (0-15)
+const int R_MOTOR_CH = 1;
+
+const int PWM_FREQ = 70;       // PWM frequency in Hz
+const int PWM_RESOLUTION = 20; // Allows control over the granularity of the speed
+const int MAX_PWM = pow(2, PWM_RESOLUTION);
+
+void moveMotors(float l_duty_cycle, float r_duty_cycle)
 {
-    float l_motor_duty_cycle;
-    float r_motor_duty_cycle;
-    String ultrasonic;
-    String command;
-} struct_message;
+    if (l_duty_cycle < 0)
+    {
+        ledcDetachPin(D2);
+        ledcAttachPin(D3, R_MOTOR_CH);
+        digitalWrite(D2, 0);
+    }
+    else
+    {
+        ledcDetachPin(D3);
+        ledcAttachPin(D2, R_MOTOR_CH);
+        digitalWrite(D3, 0);
+    }
 
-struct_message data;
+    if (r_duty_cycle < 0)
+    {
+        ledcDetachPin(D1);
+        ledcAttachPin(D0, L_MOTOR_CH);
+        digitalWrite(D1, 0);
+    }
+    else
+    {
 
-esp_now_peer_info_t peerInfo;
+        ledcDetachPin(D0);
+        ledcAttachPin(D1, L_MOTOR_CH);
+        digitalWrite(D0, 0);
+    }
 
-// callback when data is sent
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
-{
-    // char macStr[18];
-    // Serial.print("Packet to: ");
-    // // Copies the sender mac address to a string
-    // snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
-    //          mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
-    // Serial.print(macStr);
-    // Serial.print(" send status:\t");
-    // Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
-    Serial.println("l_motor: " + String(data.l_motor_duty_cycle));
-    Serial.println("r_motor: " + String(data.r_motor_duty_cycle));
-    Serial.println("command: " + String(data.command));
+    if (l_duty_cycle == 0)
+        l_duty_cycle = 0;
+    else
+        l_duty_cycle = round(abs(l_duty_cycle) * MAX_PWM);
+
+    if (r_duty_cycle == 0)
+        r_duty_cycle = 0;
+    else
+        r_duty_cycle = round(abs(r_duty_cycle) * MAX_PWM);
+
+    // Serial.println("l_duty_cycle: " + String(l_duty_cycle));
+    // Serial.println("r_duty_cycle: " + String(r_duty_cycle));
+
+    ledcWrite(L_MOTOR_CH, l_duty_cycle);
+    ledcWrite(R_MOTOR_CH, r_duty_cycle);
 }
-
-// Max speed of motors
-const float MAX_SPEED = 0.25;
-
-// Max distance for ultrasonic
-const int MAX_DISTANCE = 80;
-const int WALL_DISTANCE = 40;
-
-// Ultrasonic pin config
-const int TRIGGER_PIN_1 = 32;
-const int ECHO_PIN_1 = 34;
-
-const int TRIGGER_PIN_2 = 5;
-const int ECHO_PIN_2 = 18;
-
-const int TRIGGER_PIN_3 = 33;
-const int ECHO_PIN_3 = 35;
-
-const int TRIGGER_PIN_4 = 23;
-const int ECHO_PIN_4 = 19;
-
-int state = 0;
-
-// Initialise Newping Object (Ultrasonics)
-NewPing sonar_right(TRIGGER_PIN_1, ECHO_PIN_1, MAX_DISTANCE);
-NewPing sonar_front(TRIGGER_PIN_2, ECHO_PIN_2, MAX_DISTANCE);
-NewPing sonar_left(TRIGGER_PIN_3, ECHO_PIN_3, MAX_DISTANCE);
-NewPing sonar_back(TRIGGER_PIN_4, ECHO_PIN_4, MAX_DISTANCE);
-
-// IMU - I2C address 0x68
-// Nothing for now
-
-//--------------- Helper functions -----------------//
-int *get_ultrasonic_dist(); // Returns array[4] = {right, front, left, back}
-void show_distance(int *ultrasonic_dist_arr);
-float mapfloat(float x, float in_min, float in_max, float out_min, float out_max);
-
-//-------------- Essential functions ---------------//
-void forward(); // Returns array[2] = {l_motor_duty_cycle, r_motor_duty_cycle}
-// void forward(unsigned long time);
-// void turn_left();
-// void turn_right();
-void stop();
-// void go_home();
-
-// Programme start timer
-unsigned long start_time = millis();
 
 //--------------- ESP32 Logic ----------------------//
 void setup()
 {
     Serial.begin(115200);
 
-    // ESP_NOW
-    WiFi.mode(WIFI_STA);
-    if (esp_now_init() != ESP_OK)
-    {
-        Serial.println("Error initialising ESP_NOW");
-        return;
-    }
-    esp_now_register_send_cb(OnDataSent);
-    // Register peer
-    peerInfo.channel = 0;
-    peerInfo.encrypt = false;
-    // Register first peer
-    memcpy(peerInfo.peer_addr, broadcast_address1, 6);
-    if (esp_now_add_peer(&peerInfo) != ESP_OK)
-    {
-        Serial.println("Failed to add peer");
-        return;
-    }
-    // Register second peer
-    memcpy(peerInfo.peer_addr, broadcast_address2, 6);
-    if (esp_now_add_peer(&peerInfo) != ESP_OK)
-    {
-        Serial.println("Failed to add peer");
-        return;
-    }
-
-    stop();
-    delay(5000);
+    ledcSetup(L_MOTOR_CH, PWM_FREQ, PWM_RESOLUTION); // Configure PWM parameters for channel 0
+    ledcSetup(R_MOTOR_CH, PWM_FREQ, PWM_RESOLUTION);
+    pinMode(D0, OUTPUT);
+    pinMode(D1, OUTPUT);
+    pinMode(D2, OUTPUT);
+    pinMode(D3, OUTPUT);
+    pinMode(D4, OUTPUT);
+    pinMode(D5, OUTPUT);
+    pinMode(D6, OUTPUT);
+    pinMode(D7, OUTPUT);
 }
 
 void loop()
 {
-    int dist = sonar_front.ping_cm();
-    if (state < 1)
-    {
-        while (dist > 20 || dist == 0)
-        {
-            forward();
-            dist = sonar_front.ping_cm();
-        }
-        state++;
-    }
-    stop();
+    // Serial.println(sonar_front.ping_cm());
+    float lspeed = random(-100, 100) / 100.0;
+    float rspeed = random(-100, 100) / 100.0;
+    long time = random(1000, 3000);
+
+    moveMotors(lspeed, rspeed);
+    delay(time);
+    // if (state == 1)
+    // {
+    //     data.l_motor_duty_cycle = 0.15;
+    //     data.r_motor_duty_cycle = -0.1;
+    //     data.command = "Volcano turn";
+    //     esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
+    //     delay(1000);
+
+    //     state++;
+    //     stop();
+    //     delay(1000);
+    // }
     // int *ultrasonic_dist_arr = get_ultrasonic_dist();
     // show_distance(ultrasonic_dist_arr);
     // data.l_motor_duty_cycle = 0.5;
@@ -181,52 +150,52 @@ void loop()
 */
 
 //--------------- Helper functions -----------------//
-int *get_ultrasonic_dist()
-{
-    static int distanceArray[4];
-    distanceArray[0] = sonar_right.ping_cm();
-    distanceArray[1] = sonar_front.ping_cm();
-    distanceArray[2] = sonar_left.ping_cm();
-    distanceArray[3] = sonar_back.ping_cm();
+// int *get_ultrasonic_dist()
+// {
+//     static int distanceArray[4];
+//     distanceArray[0] = sonar_right.ping_cm();
+//     distanceArray[1] = sonar_front.ping_cm();
+//     distanceArray[2] = sonar_left.ping_cm();
+//     distanceArray[3] = sonar_back.ping_cm();
 
-    return distanceArray; // Returns pointer to the array
-}
+//     return distanceArray; // Returns pointer to the array
+// }
 
-void show_distance(int *ultrasonic_dist_arr)
-{
-    for (int i = 0; i < 4; i++)
-    {
-        int dist = ultrasonic_dist_arr[i];
-        if (i == 0)
-            Serial.print("Right: ");
-        else if (i == 1)
-            Serial.print("\tFront: ");
-        else if (i == 2)
-            Serial.print("\tLeft: ");
-        else if (i == 3)
-            Serial.print("\tBack: ");
+// void show_distance(int *ultrasonic_dist_arr)
+// {
+//     for (int i = 0; i < 4; i++)
+//     {
+//         int dist = ultrasonic_dist_arr[i];
+//         if (i == 0)
+//             Serial.print("Right: ");
+//         else if (i == 1)
+//             Serial.print("\tFront: ");
+//         else if (i == 2)
+//             Serial.print("\tLeft: ");
+//         else if (i == 3)
+//             Serial.print("\tBack: ");
 
-        Serial.print(dist);
-        Serial.print("cm");
-    }
-    Serial.println();
-}
+//         Serial.print(dist);
+//         Serial.print("cm");
+//     }
+//     Serial.println();
+// }
 
-float mapfloat(float x, float in_min, float in_max, float out_min, float out_max)
-{
-    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-}
-// --------- End of Helper Functions ---------------//
+// float mapfloat(float x, float in_min, float in_max, float out_min, float out_max)
+// {
+//     return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+// }
+// // --------- End of Helper Functions ---------------//
 
-//-------------- Essential functions ---------------//
-void forward()
-{
-    Serial.println("Forward all the way");
-    data.l_motor_duty_cycle = 0.15;
-    data.r_motor_duty_cycle = 0.15;
-    data.command = "forward long";
-    esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
-}
+// //-------------- Essential functions ---------------//
+// void forward()
+// {
+//     Serial.println("Forward all the way");
+//     data.l_motor_duty_cycle = 0.15;
+//     data.r_motor_duty_cycle = 0.15;
+//     data.command = "forward long";
+//     esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
+// }
 
 // void forward(unsigned long time)
 // {
@@ -297,13 +266,13 @@ void forward()
 
 //     stop();
 // }
-void stop()
-{
-    data.l_motor_duty_cycle = 0;
-    data.r_motor_duty_cycle = 0;
-    data.command = "Stop";
-    esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
-}
+// void stop()
+// {
+//     data.l_motor_duty_cycle = 0;
+//     data.r_motor_duty_cycle = 0;
+//     data.command = "Stop";
+//     esp_now_send(0, (uint8_t *)&data, sizeof(struct_message));
+// }
 
 // void go_home()
 // {
