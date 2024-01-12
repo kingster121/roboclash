@@ -15,7 +15,7 @@ public:
     float l_motor_duty_cycle, r_motor_duty_cycle;
 
     // Speed is controlled by the forwardness/backwardness, turning is controlled by ratio determined by the left/rightness
-    // Returns duty cycle of L_MOTOR and R_MOTOR
+    // Returns duty cycle of L_MOTOR and R_MOTOR (ranges from -1 to 1)
     std::array<float, 2> move(int x, int y)
     {
         x = map(x - 1, 1000, 2000, 100, -100);
@@ -74,7 +74,6 @@ public:
         // l_motor_duty_cycle = l_motor_duty_cycle * magnitude / 100.0;
         // r_motor_duty_cycle = r_motor_duty_cycle * magnitude / 100.0;
 
-        // Note to self, i simply changed the return orirentation. Above code should change by right
         return {l_motor_duty_cycle, r_motor_duty_cycle};
     }
 };
